@@ -1,4 +1,4 @@
-# Astronomical Observation Simulator
+# Astronomical Photometric Simulator
 
 ## Overview
 
