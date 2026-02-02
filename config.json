@@ -1,0 +1,83 @@
+{
+    "camera_parameters": {
+        "pixel_size_m": 3.76e-6,
+        "pixel_number_x": 9576,
+        "pixel_number_y": 6388,
+        "gain": 1.35,
+        "dark_current_e_s_1": 0.0055,
+        "read_noise_e": 2.5,
+        "QE": 0.8,
+        "bit_per_pixel": 16
+    },
+    
+    "mount_parameters": {      
+
+    },
+    
+    "telescope_parameters": {
+        "rot_deg": 65.2,
+        "latlonalt": [31.168, 121.604, 100],
+        "seeing_arcsec": 2,
+        "focal_length_m": 2.563,
+        "diameter_m": 0.356
+    },
+    
+    "photons_config": {
+        "scintillation_seed": 543,
+        "temp_C": 0,
+        "pressure_mm": 760,
+        "relative_humidity": 50,
+        "star_catalog": "/Users/kexin_li/Documents/simulator_github/example/reference_data/all_Tianyu_standards_North.fits",
+        "delta_lambda_min": 4e-7,
+        "delta_lambda_max": 8.5e-7,
+        "zero_mag": -48.6,
+        "Gmag_limit": 16,
+        "alpha": 2.5,
+        "FWHM_error": 0.08,
+        "moffat_scale_FWHM": 5,
+        "ADR_flag": true,
+        "historical_variable_star_flag": false,
+        "galaxy_flag": false,
+        "galaxy_local_size": 100,
+        "supernova_erupt": false,
+        "satellite_flag": false,
+        "asteroid_flag": false,
+        "asteroid_move_limit_pixel":3,
+        "move_oversample_factor":2,
+        "extinction_coeffcient": 0.23,
+        "supernova_seed": 655,
+        "filter": "/Users/kexin_li/Documents/simulator_github/example/reference_data/filter_transmission.csv",
+        "band_name": "tianyu",   
+        "mag_system": "ab",
+        "gal_catalog": "/Users/kexin_li/Documents/simulator_github/example/reference_data/galaxy_gaia.csv",
+        "user_stray_field": "/Users/kexin_li/Documents/simulator_github/example/sim_events/test_stray_field.npy"
+    },
+    
+    "sensor_config": {
+        "vignetting_flag": false,
+        "cone_height": 43.458,
+        "entrance_radius": 0.369,
+        "exit_radius": 0.178,
+        "PRNU_flag": true,
+        "sigma_prnu": 0.003,
+        "seed_prnu": 623,
+        "dark_rate_model": false,
+        "dark_current_rate": 0.0055,
+        "dark_current_fpn_flag": true,
+        "dark_noise_factor": 0.01,
+        "seed_dark_fpn": 893,
+        "SF_flag": true,
+        "reset_noise_flag": false,
+        "offset_fpn_flag": false,
+        "offset_correlation_factor": 0.001,
+        "offset_fpn_sigma_U": 0.0005,
+        "seed_offset_fpn": 232,
+        "V_e_nonlinear": false,
+        "V_v_nonlinear": false,
+        "A_adc_nonlinearity_flag": false
+    },
+    
+    "world_config": {
+        "julian_date": 2460300.3
+    }
+}
