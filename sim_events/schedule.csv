@@ -1,2 +1,0 @@
-target_name,ra,dec,azi,alt,flat_level,exposure_s,delay_between_frame_s,n_max_frames,jd_utc_begin,jd_utc_end,obs_process_id,astrometry_solve,use_subpixel,last_of_this_obs
-WASP-11_test_time,47.3689307000,30.6735731000,,,,180,0,20,2460320.2200000002,2460321.3900000001,,,,
