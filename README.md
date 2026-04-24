@@ -87,11 +87,22 @@ After downloading, please place these files in the corresponding `reference_data
 
 ### Zenodo reference dataset
 
-The reference catalog dataset is archived separately on Zenodo because of file size. It contains the large star and galaxy catalogs used by AstroSkyFlow.
+AstroSkyFlow uses large reference star and galaxy catalog files that are archived separately on Zenodo because of their file size. These catalog files are not included in the GitHub repository or in the Zenodo software release.
 
-Zenodo dataset DOI: `10.5281/zenodo.18830766`
+Reference dataset DOI: [10.5281/zenodo.18830766](https://doi.org/10.5281/zenodo.18830766)
 
-Users should download the required files from the Zenodo record and place them into the appropriate `reference_data/` folder of the corresponding working directory.
+To run AstroSkyFlow or reproduce the manuscript workflows, users need to download the required reference catalog files from the Zenodo dataset record, including the star catalog and galaxy catalog files, and then place them in the `reference_data/` directory used by the workflow they want to run.
+
+For example, after downloading and extracting the Zenodo dataset, place the relevant files into one of the following directories as needed:
+
+- `modular_core/reference_data/`
+- `reproduce_paper/Binary_Xinglong/reference_data/`
+- `reproduce_paper/Transit_Muguang/reference_data/`
+
+The Zenodo software release and the Zenodo reference dataset are separate records:
+
+- Software release: [10.5281/zenodo.19733851](https://doi.org/10.5281/zenodo.19733851)
+- Reference dataset: [10.5281/zenodo.18830766](https://doi.org/10.5281/zenodo.18830766)
 
 ## 5. Quick start
 
