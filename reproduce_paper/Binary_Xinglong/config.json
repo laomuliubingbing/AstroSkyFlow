@@ -1,11 +1,11 @@
 {
     "camera_parameters": {
-        "pixel_size_m": 3.76e-6,
-        "pixel_number_x": 9576,
-        "pixel_number_y": 6388,
-        "gain": 1.35,
-        "dark_current_e_s_1": 0.0055,
-        "read_noise_e": 2.5,
+        "pixel_size_m": 13.5e-6,
+        "pixel_number_x": 2048,
+        "pixel_number_y": 2048,
+        "gain": 0.2915,
+        "dark_current_e_s_1": 0.000059,
+        "read_noise_e": 2.9,
         "QE": 0.8,
         "bit_per_pixel": 16
     },
@@ -15,27 +15,28 @@
     },
     
     "telescope_parameters": {
-        "rot_deg": 65.2,
-        "latlonalt": [31.168, 121.604, 100],
-        "seeing_arcsec": 2,
-        "focal_length_m": 2.563,
-        "diameter_m": 0.356
+        "rot_deg": 190,
+        "latlonalt": [40.393, 117.577, 960],
+        "seeing_arcsec": 3.23,
+        "focal_length_m": 2.987,
+        "diameter_m": 0.85
     },
     
     "photons_config": {
         "scintillation_seed": 543,
-        "temp_C": 0,
+
+        "temp_C": 12,
         "pressure_mm": 760,
-        "relative_humidity": 50,
-        "star_catalog": "/Users/kexin_li/Documents/simulator_github/example/reference_data/all_Tianyu_standards_North.fits",
-        "delta_lambda_min": 4e-7,
-        "delta_lambda_max": 8.5e-7,
-        "zero_mag": -48.6,
-        "Gmag_limit": 16,
-        "alpha": 2.5,
-        "FWHM_error": 0.08,
+        "relative_humidity": 65.2,
+        "star_catalog": "/Users/kexin_li/Documents/vs_py/AJ_revise_2.0/1_xinglong85/reference_data/gaia_bband_targets_gspc_only.fits",
+        "delta_lambda_min": 3.566e-7,
+        "delta_lambda_max": 5.444e-7,
+        "zero_mag": -49,
+        "Gmag_limit": 20,
+        "alpha": 2.78,
+        "FWHM_error": 0.15,
         "moffat_scale_FWHM": 5,
-        "ADR_flag": true,
+        "ADR_flag": false,
         "historical_variable_star_flag": false,
         "galaxy_flag": false,
         "galaxy_local_size": 100,
@@ -46,18 +47,19 @@
         "move_oversample_factor":2,
         "extinction_coeffcient": 0.23,
         "supernova_seed": 655,
-        "filter": "/Users/kexin_li/Documents/simulator_github/example/reference_data/filter_transmission.csv",
-        "band_name": "tianyu",   
+        "filter": "/Users/kexin_li/Documents/vs_py/AJ_revise_2.0/1_xinglong85/reference_data/filter_transmission.csv",
+        "band_name": "Johnson:B",   
+        "custom": false,
         "mag_system": "ab",
         "gal_catalog": "/Users/kexin_li/Documents/simulator_github/example/reference_data/galaxy_gaia.csv",
-        "user_stray_field": "/Users/kexin_li/Documents/simulator_github/example/sim_events/test_stray_field.npy"
+        "user_stray_field": null
     },
     
     "sensor_config": {
-        "vignetting_flag": false,
-        "cone_height": 43.458,
-        "entrance_radius": 0.369,
-        "exit_radius": 0.178,
+        "vignetting_flag": true,
+        "cone_height": 147.342,
+        "entrance_radius": 0.863,
+        "exit_radius": 0.425,
         "PRNU_flag": true,
         "sigma_prnu": 0.003,
         "seed_prnu": 623,
@@ -74,7 +76,10 @@
         "seed_offset_fpn": 232,
         "V_e_nonlinear": false,
         "V_v_nonlinear": false,
-        "A_adc_nonlinearity_flag": false
+        "A_adc_nonlinearity_flag": false,
+        "A_SN": 3e-5,
+        "A_SF": 0.5399,
+        "A_adc_linear": 17998
     },
     
     "world_config": {

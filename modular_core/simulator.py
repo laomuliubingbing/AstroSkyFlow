@@ -44,6 +44,8 @@ import json
 from tqdm import tqdm
 import time as sys_time
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
 class hardware:
     def __init__(self,hardware_type,name = 'simulator'):
         self.connected = False
@@ -251,7 +253,7 @@ class world:
     def time_astropy(self):
         return Time(self.time,scale = 'utc',format = 'jd',location = self.telescope.position)
     
-    def create_fits_header(self, r):
+    def create_fits_header(self, r, obs_start_jd=None):
         header = fits.Header()
         # basci FITS header keywords
         header['SIMPLE'] = (True, 'file does conform to FITS standard')
@@ -264,7 +266,10 @@ class world:
         header['BZERO'] = (0.0, 'physical = BZERO + BSCALE*array_value')
 
         # time
-        time_obj = self.time_astropy
+        if obs_start_jd is None:
+            time_obj = self.time_astropy
+        else:
+            time_obj = Time(obs_start_jd, scale='utc', format='jd', location=self.telescope.position)
         header['DATE-OBS'] = (time_obj.iso, 'YYYY-MM-DDThh:mm:ss observation start, UT')
         header['EXPTIME'] = (r['exposure_s'], 'Exposure time in seconds')
         header['EXPOSURE'] = (r['exposure_s'], 'Exposure time in seconds')
@@ -445,10 +450,11 @@ class world:
                         self.target_dir = target_dir
                         self.schedule_target_name = r['target_name']
                         out = target_dir
+                        obs_start_jd = self._time
                         self.telescope.camera.capture(r['exposure_s'])
                         self._time = wait_to_ok(self.telescope.camera)
                         image = self.telescope.camera.download(self.img_simulator.simulate_full_chain(frame_type=r['target_name'], flat_level=r['flat_level']))
-                        header = self.create_fits_header(r)
+                        header = self.create_fits_header(r, obs_start_jd=obs_start_jd)
                         fits.writeto(out / (r['target_name'] + '-' + str(ct_name[r['target_name']]) + '.fits'),  image.astype(np.int32), overwrite=True, header=header)
                         print(r['target_name'],'captured at',self.time)
                         self._time = self._time + r['delay_between_frame_s']/24/3600
@@ -483,6 +489,46 @@ class photons_distribution_simulator:
     gaia_dict = {}
     vsx_dict = {}
     galaxy_sn_dict = {}
+
+    def _get_filter_curve(self):
+        df = pd.read_csv(self.filter)
+        if 'wavelength' not in df.columns or 'throughput_frac' not in df.columns:
+            raise ValueError(
+                f"Filter file '{self.filter}' must contain 'wavelength' and 'throughput_frac' columns."
+            )
+
+        if 'band' in df.columns:
+            band_series = df['band'].astype(str).str.strip()
+            band_name = str(self.band_name).strip()
+            matched = df.loc[band_series == band_name]
+            if not matched.empty:
+                df = matched
+
+        wavelength = np.asarray(df['wavelength'], dtype=float)
+        transmission = np.asarray(df['throughput_frac'], dtype=float)
+        valid = np.isfinite(wavelength) & np.isfinite(transmission) & (transmission > 0)
+        wavelength = wavelength[valid]
+        transmission = transmission[valid]
+
+        if wavelength.size == 0:
+            raise ValueError(f"Filter file '{self.filter}' contains no valid throughput samples.")
+
+        order = np.argsort(wavelength)
+        wavelength = wavelength[order]
+        transmission = transmission[order]
+        return wavelength, transmission
+
+    def _compute_filter_photon_energy(self, wavelength_angstrom, transmission):
+        h = constants.h
+        c = constants.c
+
+        lambda_eff_angstrom = np.trapz(wavelength_angstrom * transmission, wavelength_angstrom) / np.trapz(
+            transmission, wavelength_angstrom
+        )
+        lambda_eff_m = lambda_eff_angstrom * 1e-10
+        hnu = h * c / lambda_eff_m
+        return lambda_eff_angstrom, hnu
+
     def __init__(self, photons_config):
         default_par = {
             "sky_raw_mag": 21,
@@ -490,12 +536,12 @@ class photons_distribution_simulator:
             "CY": 2,
             "scintillation_L0": None,
             "scintillation_method": "lognormal",
-            "transit_catalog": "./sim_events/transit.csv",
-            "supernova_erupt_catalog": "./sim_events/supernova_erupt.csv",
-            "binary_catalog": "./sim_events/binary.csv",
-            "flare_catalog": "./sim_events/flare.csv",
-            "occultation_catalog": "./sim_events/occultation.csv",
-            "satellite_catalog": "./sim_events/starlink.txt",
+            "transit_catalog": f"{current_dir}/sim_events/transit.csv",
+            "supernova_erupt_catalog": f"{current_dir}/sim_events/supernova_erupt.csv",
+            "binary_catalog": f"{current_dir}/sim_events/binary.csv",
+            "flare_catalog": f"{current_dir}/sim_events/flare.csv",
+            "occultation_catalog": f"{current_dir}/sim_events/occultation.csv",
+            "satellite_catalog": f"{current_dir}/sim_events/starlink.txt",
             "satellite_mag":5
         }
         user_par = photons_config
@@ -503,19 +549,18 @@ class photons_distribution_simulator:
         self.initpar = merged
         for key, val in merged.items():
             setattr(self, key, val) 
-        df = pd.read_csv(self.filter)
-        wavelength = np.asarray(df['wavelength']) 
-        transmission = np.asarray(df['throughput_frac'])
-        nu = 3e8 / (wavelength * 1e-9)  # Hz
+
+        wavelength, transmission = self._get_filter_curve()
+        nu = 3e8 / (wavelength * 1e-10)  # Hz
         idx = np.argsort(nu)
         nu_sorted = nu[idx]
         T_sorted = transmission[idx]
         T_lamda = np.trapz(T_sorted, nu_sorted)
         self.T_lambda = T_lamda
+        self.lambda_eff_angstrom, self.hnu = self._compute_filter_photon_energy(wavelength, transmission)
         
     def connect(self, world):
         self.world = world
-        self.hnu = 4.45765*6.62607015e-20
         self.target_key = (self.world.telescope.mount.ra_deg, self.world.telescope.mount.dec_deg)
         self.FWHM = self.world.telescope.seeing_arcsec / self.world.telescope.arcsec_pixel_1
         # self.FWHM_origin = self.world.telescope.seeing_arcsec / self.world.telescope.arcsec_pixel_1
@@ -1168,10 +1213,116 @@ class photons_distribution_simulator:
                 combined_df.to_csv(csv_transit_path, index=False)
 
         return transit_relative_flux   
+
+    def _compute_binary_fluxes(self, row, times, passband):
+        times = np.atleast_1d(np.asarray(times, dtype=float))
+        binary_type = str(row['type']).strip().upper()
+
+        if binary_type == 'EA':
+            b = phoebe.default_binary()
+            dataset = 'lc01'
+            b.add_dataset('lc', times=times, passband=passband, dataset=dataset)
+            b.set_value('t0_supconj@binary@component', component='binary', value=float(row['t0']))
+            b.set_value('period', component='binary', value=float(row['period']))
+            b.set_value('q', component='binary', value=float(row['q']))
+            b.set_value('incl', component='binary', value=float(row['incl']))
+            b.set_value('sma', component='binary', value=float(row['sma']))
+            b.set_value('teff', component='primary', value=float(row['teff1']))
+            b.set_value('requiv', component='primary', value=float(row['r1']))
+            b.set_value('teff', component='secondary', value=float(row['teff2']))
+            b.set_value('requiv', component='secondary', value=float(row['r2']))
+            b.run_compute()
+            return np.asarray(b[f'value@fluxes@{dataset}@model'], dtype=float)
+
+        if binary_type == 'EB':
+            last_error = None
+            for semi_comp in ['primary', 'secondary']:
+                b = phoebe.default_binary()
+                dataset = 'lc02'
+                b.add_constraint('semidetached', semi_comp)
+                b.add_dataset('lc', times=times, passband=passband, dataset=dataset)
+                b.set_value('teff', component='primary', value=float(row['teff1']))
+                b.set_value('teff', component='secondary', value=float(row['teff2']))
+                if semi_comp == 'primary':
+                    b.set_value('requiv', component='secondary', value=float(row['r2']))
+                else:
+                    b.set_value('requiv', component='primary', value=float(row['r1']))
+                b.set_value('t0_supconj@binary@component', component='binary', value=float(row['t0']))
+                b.set_value('period', component='binary', value=float(row['period']))
+                b.set_value('q', component='binary', value=float(row['q']))
+                b.set_value('incl', component='binary', value=float(row['incl']))
+                b.set_value('sma', component='binary', value=float(row['sma']))
+                try:
+                    b.run_compute()
+                    return np.asarray(b[f'value@fluxes@{dataset}@model'], dtype=float)
+                except Exception as err:
+                    last_error = err
+                    print(f"semidetached={semi_comp} compute failed: {err}")
+
+            b.set_value('atm', component='primary', value='blackbody')
+            b.set_value('ld_mode', component='primary', value='manual')
+            b.set_value('ld_func', component='primary', dataset=dataset, value='logarithmic')
+            b.set_value('ld_coeffs', component='primary', dataset=dataset, value=[0.5, 0.5])
+            b.run_compute()
+            if last_error is not None:
+                print(f"EB fallback used after compute failure: {last_error}")
+            return np.asarray(b[f'value@fluxes@{dataset}@model'], dtype=float)
+
+        if binary_type == 'EW':
+            b = phoebe.default_binary(contact_binary=True)
+            dataset = 'lc03'
+            b.add_dataset('lc', times=times, passband=passband, dataset=dataset)
+            b.set_value('t0_supconj@binary@component', component='binary', value=float(row['t0']))
+            b.set_value('period', component='binary', value=float(row['period']))
+            b.set_value('q', component='binary', value=float(row['q']))
+            b.set_value('incl', component='binary', value=float(row['incl']))
+            b.set_value('sma', component='binary', value=float(row['sma']))
+            b.set_value('teff', component='primary', value=float(row['teff1']))
+            b.set_value('requiv@primary@component', component='primary', value=float(row['r1']))
+            b.set_value('teff', component='secondary', value=float(row['teff2']))
+            b.run_compute()
+            return np.asarray(b[f'value@fluxes@{dataset}@model'], dtype=float)
+
+        raise ValueError(f"Unknown binary type: {binary_type}")
+
+    def _parse_binary_max_flux_value(self, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            if value == '' or value.lower() in {'nan', 'none', 'null'}:
+                return None
+        if pd.isna(value):
+            return None
+        try:
+            max_flux = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not np.isfinite(max_flux) or max_flux <= 0:
+            return None
+        return max_flux
+
+    def _get_binary_max_flux(self, row, passband, n_phase_samples=200):
+        max_flux = self._parse_binary_max_flux_value(row.get('max_flux'))
+        if max_flux is None:
+            max_flux = self._parse_binary_max_flux_value(row.get('flux_max'))
+        if max_flux is not None:
+            return max_flux
+
+        period = float(row['period'])
+        sample_times = float(row['t0']) + np.linspace(0, period, n_phase_samples, endpoint=False)
+        fluxes = self._compute_binary_fluxes(row, sample_times, passband)
+        max_flux = float(np.nanmax(fluxes))
+        if not np.isfinite(max_flux) or max_flux <= 0:
+            raise ValueError(f"Invalid max_flux={max_flux} for binary source {row['dr3_source_id']}")
+        return max_flux
  
     def binary(self, t_tdb_jd, binary_catalog, r, r_object_shape):
         binary_relative_flux = np.ones(r_object_shape)
-        passband = f'Custom:{self.band_name}'
+        if self.custom:
+            passband = f'Custom:{self.band_name}'
+        else:
+            passband = self.band_name
         if type(binary_catalog)==str:
             df = pd.read_csv(self.filter)
             # band_name = self.band_name
@@ -1183,13 +1334,20 @@ class photons_distribution_simulator:
 
             new_binary_data = []
             binary_events = pd.read_csv(binary_catalog)
+            if 'max_flux' not in binary_events.columns:
+                if 'flux_max' in binary_events.columns:
+                    binary_events['max_flux'] = binary_events['flux_max']
+                else:
+                    binary_events['max_flux'] = np.nan
             #sprint(transit_events)
 
             for index,row in binary_events.iterrows():
                 if not row['dr3_source_id'] in r['SOURCE_ID']:
                     continue
 
-                if row['type'] == 'EA':
+                binary_type = str(row['type']).strip().upper()
+
+                if binary_type == 'EA':
                     target_id = row['dr3_source_id']
                     target = r[r['SOURCE_ID']==row['dr3_source_id']]
 
@@ -1197,35 +1355,27 @@ class photons_distribution_simulator:
                     ltt_bary = self.world.time_astropy.light_travel_time(target_pos)
                     time_barycentre = t_tdb_jd + ltt_bary
 
-                    # Use phoebe to generate the light curve
-                    b = phoebe.default_binary()
-                    b.add_dataset('lc', times=[time_barycentre.jd], passband=passband, dataset='lc01')
-                    b.set_value('t0_supconj@binary@component', component='binary', value=float(row['t0'])) #  reference time of inferior conjunction
-                    b.set_value('period', component='binary', value=float(row['period']))    # orbit period
-                    b.set_value('q', component='binary', value=float(row['q']))        # mass ratio
-                    b.set_value('incl', component='binary', value=float(row['incl']))   # orbital inclination (in degrees)
-                    b.set_value('sma', component='binary', value=float(row['sma']))     # orbital semi-axis
-
-                    b.set_value('teff', component='primary', value=float(row['teff1']))   # primary temperature (K)
-                    b.set_value('requiv', component='primary', value=float(row['r1']))    # primary radius (solar radius)
-                    b.set_value('teff', component='secondary', value=float(row['teff2']))  # secondary temperature
-                    b.set_value('requiv', component='secondary', value=float(row['r2']))  # secondary radius
-
                     try:
-                        b.run_compute()
+                        max_flux = self._get_binary_max_flux(row, passband)
+                        binary_events.at[index, 'max_flux'] = max_flux
+                        flux = float(self._compute_binary_fluxes(row, [time_barycentre.jd], passband)[0])
                     except Exception as err:
                         print(f"Error: {err}")
-                    flux = b['value@fluxes@lc01@model'][0]
+                        continue
+                    normalized_flux = flux / max_flux
+                    binary_relative_flux[np.where(r['SOURCE_ID']==row['dr3_source_id'])] = normalized_flux
 
                     new_binary_data.append({
                     'target_id': target_id,
                     'tdb_jd': t_tdb_jd,
                     'tdb_bjd': time_barycentre.jd,
-                    'normalized_flux': flux
+                    'raw_flux': flux,
+                    'max_flux': max_flux,
+                    'normalized_flux': normalized_flux
                     })
 
                    
-                elif row['type'] == 'EB':
+                elif binary_type == 'EB':
                     target_id = row['dr3_source_id']
                     target = r[r['SOURCE_ID']==row['dr3_source_id']]
 
@@ -1234,51 +1384,26 @@ class photons_distribution_simulator:
 
                     time_barycentre = t_tdb_jd + ltt_bary
 
-                    # Use phoebe to generate the light curve
-                    for semi_comp in ['primary', 'secondary']:
-                        b = phoebe.default_binary()
-                        b.add_constraint('semidetached', semi_comp)
-                        b.add_dataset('lc', times=[time_barycentre.jd], passband=passband, dataset='lc02')
-                       
-                        b.set_value('teff', component='primary', value=float(row['teff1'])) 
-                        b.set_value('teff', component='secondary', value=float(row['teff2'])) 
-
-                        if semi_comp == 'primary':
-                            b.set_value('requiv', component='secondary', value=float(row['r2']))  
-                        else:
-                            b.set_value('requiv', component='primary', value=float(row['r1']))
-
-                        b.set_value('t0_supconj@binary@component', component='binary', value=float(row['t0']))
-                        b.set_value('period', component='binary', value=float(row['period']))
-                        b.set_value('q', component='binary', value=float(row['q']))  
-                        b.set_value('incl', component='binary', value=float(row['incl']))
-                        b.set_value('sma', component='binary', value=float(row['sma']))  
-                        try:
-                            b.run_compute()
-                            success = True
-                            break
-                        except Exception as e:
-                            print(f"semidetached={semi_comp} compute failed: {e}")
-                            success = False
-
-                    if not success:
-                        # fallback on blackbody atmospheres and manually provide the limb-darkening function and coefficients
-                        b.set_value('atm', component='primary', value='blackbody')
-                        b.set_value('ld_mode', component='primary', value='manual')
-                        b.set_value('ld_func', component='primary', dataset='lc02', value='logarithmic')
-                        b.set_value('ld_coeffs', component='primary', dataset='lc02', value=[0.5, 0.5])
-                        b.run_compute()
-
-                    flux = b['value@fluxes@lc02@model'][0]
+                    try:
+                        max_flux = self._get_binary_max_flux(row, passband)
+                        binary_events.at[index, 'max_flux'] = max_flux
+                        flux = float(self._compute_binary_fluxes(row, [time_barycentre.jd], passband)[0])
+                    except Exception as err:
+                        print(f"Error: {err}")
+                        continue
+                    normalized_flux = flux / max_flux
+                    binary_relative_flux[np.where(r['SOURCE_ID']==row['dr3_source_id'])] = normalized_flux
 
                     new_binary_data.append({
                     'target_id': target_id,
                     'tdb_jd': t_tdb_jd,
                     'tdb_bjd': time_barycentre.jd,
-                    'normalized_flux': flux
+                    'raw_flux': flux,
+                    'max_flux': max_flux,
+                    'normalized_flux': normalized_flux
                     })
 
-                elif row['type'] == 'EW':
+                elif binary_type == 'EW':
                     target_id = row['dr3_source_id']
                     target = r[r['SOURCE_ID']==row['dr3_source_id']]
 
@@ -1287,38 +1412,29 @@ class photons_distribution_simulator:
 
                     time_barycentre = t_tdb_jd + ltt_bary
 
-                    # Use phoebe to generate the light curve
-                    b = phoebe.default_binary(contact_binary=True)
-                    b.add_dataset('lc', times=[time_barycentre.jd], passband=passband, dataset='lc03')
-                    # orbit:binary
-                    # print(b.filter(component='binary', kind='orbit', context='component'))
-                    b.set_value('t0_supconj@binary@component', component='binary', value=float(row['t0']))
-                    b.set_value('period', component='binary', value=float(row['period'])) 
-                    b.set_value('q',component='binary', value=float(row['q']))  
-                    b.set_value('incl', component='binary', value=float(row['incl']))  
-                    b.set_value('sma', component='binary', value=float(row['sma']))  
-
-                    # star: primary, secondary
-                    # print(b.filter(component='secondary', kind='star', context='component'))
-                    b.set_value('teff', component='primary', value=float(row['teff1']))  
-                    b.set_value('requiv@primary@component', component='primary', value=float(row['r1']))  
-                    b.set_value('teff', component='secondary', value=float(row['teff2']))  
-
                     try:
-                        b.run_compute()
+                        max_flux = self._get_binary_max_flux(row, passband)
+                        binary_events.at[index, 'max_flux'] = max_flux
+                        flux = float(self._compute_binary_fluxes(row, [time_barycentre.jd], passband)[0])
                     except Exception as err:
                         print(f"Error: {err}")
-                    flux = b['value@fluxes@lc03@model'][0]
+                        continue
+                    normalized_flux = flux / max_flux
+                    binary_relative_flux[np.where(r['SOURCE_ID']==row['dr3_source_id'])] = normalized_flux
                     
                     new_binary_data.append({
                     'target_id': target_id,
                     'tdb_jd': t_tdb_jd,
                     'tdb_bjd': time_barycentre.jd,
-                    'normalized_flux': flux
+                    'raw_flux': flux,
+                    'max_flux': max_flux,
+                    'normalized_flux': normalized_flux
                     })
 
                 else:
                     print("Unknown type")
+
+            binary_events.to_csv(binary_catalog, index=False)
             
             if new_binary_data:
                 csv_binary_path = Path(self.world.target_dir) / 'binary_inputdata_sorted.csv'
@@ -1551,6 +1667,7 @@ class photons_distribution_simulator:
                 MODE = row['MODE']
 
                 # 计算时间差和位置
+                # print(f"occultation time（修改设置时间）: {time_barycentre.jd}")
                 time_diff = time_barycentre.jd - reference_time
                 dt_seconds = time_diff * 86400  
                 v_rel_mps = v_rel_kms * 1e3
@@ -2047,7 +2164,7 @@ CONTAINS(
         # Get the magnitude error
         if star_catalog == 'online':
             error_fraction_jitter_sample = self.jitter_error(r)
-            flux = self.T_lambda  * 1e10 * 1.346109e-21 * r['phot_g_mean_flux']
+            flux = (1050-330) * 1.346109e-21 * r['phot_g_mean_flux']
         else:
             error_fraction_jitter_sample = np.ones(len(r)) # do not apply jitter error due to the lack columns of local catalog
             flux = self.T_lambda * 1e-3 * 10**(-0.4*(mag_raw-self.zero_mag))
@@ -2523,8 +2640,12 @@ CONTAINS(
                 gal_n = np.array(select_data['n_sersic'])
                 gal_re_mas = np.array(select_data['radius_sersic'])
                 gal_re = gal_re_mas / 1000 
-                gal_flux = np.array(select_data['phot_g_mean_flux'])
-                gal_flux_g = (1050-330) * 1.346109e-21 * gal_flux
+                if self.star_catalog == 'online':
+                    gal_flux = np.array(select_data['phot_g_mean_flux'])
+                    gal_flux_g = (1050-330) * 1.346109e-21 * gal_flux
+                else:
+                    gal_flux_g = self.T_lambda * 1e-3 * 10**(-0.4*(select_data['phot_g_mean_mag']-self.zero_mag))
+                
 
                 if self.ADR_flag == True:
                     error_ADR_coordinates_gal = self.ADR(self.world.time_astropy.tdb.jd, gal_ra, gal_dec)
@@ -2614,13 +2735,13 @@ CONTAINS(
                     while count < K:
                         j = rng.choice(N, p=g)   #  An element is selected from the indexed set {0,1,...,N-1} and the probability that the ith one is selected is g_i  
                         u = rng.uniform(0, M*g[j])
-                        if u < R[j]:
+                        if u < R[j] and j not in S:
                             S.append(j)
                             count +=1
                     # print(gal, R, K, S)
                     return S
                 def R_Ia(z):
-                    return 0.3e-3 * (1 + z)**(-1.5)  # unit yr⁻¹ Mpc⁻³
+                    return 0.3e-3 * (1 + z)**(2.11)  # unit yr⁻¹ Mpc⁻³
 
                 supernova_erupt_events = pd.read_csv(supernova_erupt_catalog)
                 new_gal_sn_data = []
@@ -2663,9 +2784,9 @@ CONTAINS(
                             'c': c_sn_erupt      
                         }
                         model.set(**params)
-                        lc_sn_erupt = model.bandflux(band_name, time_barycentre.jd, zp=self.zero_mag, zpsys=mag_system)  # erg/s/cm^2/A
-                        flux_sn_erupt.append(lc_sn_erupt * 1e-3 * self.T_lambda * 1e-10)  # change to J/s/m^2
-                        print(f"Supernova erupt flux at t (JD): {lc_sn_erupt}, converted flux: {lc_sn_erupt * 1e-3 * self.T_lambda * 1e-10} J/s/m^2")
+                        lc_sn_erupt = model.bandflux(band_name, time_barycentre.jd, zp=25, zpsys=mag_system)  # photons/s/cm^2
+                        flux_sn_erupt.append(lc_sn_erupt * 1e4)  # change to photons/s/m^2
+                        # print(f"Supernova erupt flux at t (JD): {lc_sn_erupt}, converted flux: {lc_sn_erupt * 1e-3 * self.T_lambda * 1e-10} J/s/m^2")
 
                     if self.ADR_flag == True:
                         error_ADR_coordinates_sn = self.ADR(t_tdb_jd, ra_sn_erupt, dec_sn_erupt)
@@ -2697,11 +2818,11 @@ CONTAINS(
                         FWHM_each = np.clip(np.random.normal(loc=self.FWHM, scale=self.FWHM_error * self.FWHM),
                                  a_min=lower, a_max=upper)
                         gamma_each = FWHM_each / (2 * np.sqrt(2**(1/self.alpha) - 1))
-                        normalize_factor_each =  (self.world.telescope.diameter_m/2)**2 * self.world.telescope.camera.exposure_s  * (self.alpha - 1)/ (gamma_each**2 * self.hnu)
+                        normalize_factor_each =  (self.world.telescope.diameter_m/2)**2 * self.world.telescope.camera.exposure_s  * (self.alpha - 1)/ (gamma_each**2) ## model.bandflux already has the unit of photons/s/m^2, and already consider the band transmission, so no need to multiply self.T_lambda 
                         A_each = A * normalize_factor_each
                         g = Moffat2D(amplitude=A_each, x_0=x0, y_0=y0, gamma=gamma_each, alpha=self.alpha)
                         image_supernova[y_min:y_max, x_min:x_max] += g(X_sub, Y_sub)
-
+                    # print(f"换算成光子数指数:{(self.world.telescope.diameter_m/2)**2 * self.world.telescope.camera.exposure_s  / self.hnu}, 换算到J/s/m^2的指数: {1e-3 * self.T_lambda * 1e-10}")
                     for i in range(len(id_sn_erupt)):
                         new_gal_sn_data.append({
                             'Gaia DR3 id': id_sn_erupt[i],
@@ -2849,17 +2970,14 @@ class sensor:
             "delta_I": 1e-12,
             "t_s": 1e-6,
             "tau_D": 5e-7,
-            "A_SN": 5e-5,
-            "A_SF": 0.9,
             "sensing_capacitance": 1e-15,
             "offset_correlation_factor": 0.001,
             "offset_fpn_sigma_U": 0.0005,
             "seed_offset_fpn": 232,
-            "V_ref": 2.2,
+            # "V_ref": 2.2,
             "alpha": 1e-15,
             "gamma_nlr": 1.04,
             "v_full_well": 2.0,
-            "A_adc_linear": 30000,
             "gamma_adc_nonlin": 1.01,
             "V_adc_ref": 2
         }
@@ -2868,6 +2986,7 @@ class sensor:
         self.initpar = merged
         for key, val in merged.items():
             setattr(self, key, val)
+        self.V_ref = self.V_adc_ref / self.A_SF
 
     def connect(self, world):
         self.world = world
@@ -3092,7 +3211,7 @@ class sensor:
 
     def simulate_full_chain(self, frame_type='star', flat_level=None):
         if 'bias' in frame_type:
-            self.photon_count = np.zeros((self.world.telescope.camera.pixel_number_y, self.world.telescope.camera.pixel_number_x))
+            self.photon_count = np.zeros((self.world.telescope.camera.pixel_number_y, self.world.telescope.camera.pixel_number_x)) + self.world.telescope.camera.bias_level
             photons_with_shot = np.random.poisson(self.photon_count)
             photon_count = photons_with_shot * int(self.vignetting_flag) * self.simulate_vignetting() + photons_with_shot * int(not self.vignetting_flag)  # vignetting effect
         elif 'flat' in frame_type:
@@ -3161,8 +3280,7 @@ class sensor:
 
 if __name__ == '__main__':
 
-
-    with open('./config.json', 'r', encoding='utf-8') as f:
+    with open(f'{current_dir}/config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
 
 
@@ -3178,9 +3296,9 @@ if __name__ == '__main__':
     
     
     world_config = config['world_config']
-    output_path = world_config.get('output_path', "./output")
+    output_path = world_config.get('output_path', f"{current_dir}/output")
     julian_date = world_config.get('julian_date', 2460000.000)
-    schedule_file = world_config.get('schedule_file', "./sim_events/schedule.csv")
+    schedule_file = world_config.get('schedule_file', f"{current_dir}/sim_events/schedule.csv")
     
 
     cam = camera(camera_par)
@@ -3193,7 +3311,3 @@ if __name__ == '__main__':
     
 
     wd.run_sim()
-
-
-
-

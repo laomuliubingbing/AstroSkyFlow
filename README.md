@@ -1,160 +1,139 @@
-# Astronomical Photometric Simulator
+# AstroSkyFlow
 
-## Overview
+AstroSkyFlow is a modular photometric image simulator designed to generate high-fidelity, multi-epoch astronomical image sequences for pipeline validation, signal-injection experiments, and machine-learning applications.
 
-This simulator generates synthetic astronomical observation images with configurable parameters, variable sources, and realistic effects. It is designed with a modular architecture to facilitate customization and reproducibility.
+## Repository Structure
 
-## Directory Structure
+This repository is organized into four main parts:
 
-The simulator follows a modular organization separating core scripts, input configurations, reference data, and simulation outputs:
-
-```
-simulator/
-├── simulator.py                            # Main execution script
-├── local_catalog_screening.py              # FOV-specific catalog filtering
-├── config.json                             # Simulator parameters configuration
-├── events/                                 # Observation schedules and variable sources
-│   ├── schedule.csv                        # Observation targets and timeline
-│   ├── transit.csv                         # Transit event parameters
-│   ├── binary.csv                          # Binary star parameters
-│   ├── flare.csv                           # Stellar flare parameters
-│   ├── occultation.csv                     # Occultation event parameters
-│   ├── supernova.csv                       # Supernova parameters
-│   ├── satellite.txt                       # Lateset satellite TLE data (from CelesTrak)
-│   └── stray_field.fits or stray_field.npy # Artificially defined stray light field
-├── reference_data/                         # Photometric reference data
-│   ├── stellar_catalog.fits                # Stellar photometry
-│   ├── galaxy_catalog.csv                  # Galaxy photometry
-│   └── filter_curves.csv                   # Filter transmission curves
-└── output/                                 # Simulation results
-    └── [order_target_name]/                # Per-target output directory
-        ├── *.fits                          # Simulated images
-        └── injected_*.csv                  # Injected variable source parameters
+```text
+AstroSkyFlow/
+├── modular_core/
+├── tests/
+├── reproduce_paper/
+├── README.md
+└── LICENSE
 ```
 
-## Key Components
+- `modular_core/` contains the main code and the modular directory structure of the simulator.
+- `tests/` contains minimal public test files for lightweight software validation.
+- `reproduce_paper/` contains the materials needed to reproduce the scientific results presented in the manuscript.
+- `README.md` describes the repository structure and usage.
+- `LICENSE` provides the software license information.
 
-### Core Scripts
+## 1. Main simulator structure: `modular_core/`
 
-- **simulator.py**: Main execution logic for the simulation pipeline.
-- **local_catalog_screening.py**: Filters catalogs for specific fields of view (FOV) based on observation tasks.
+`modular_core/` corresponds to the “Modular directory structure” described in the manuscript.
 
+A typical layout is:
 
-### Configuration Files
+```text
+modular_core/
+├── simulator.py
+├── local_catalog_screening.py
+├── config.json
+├── schedule.csv
+├── sim_events/
+│   ├── transit.csv
+│   ├── binary.csv
+│   ├── flare.csv
+│   ├── occultation.csv
+│   ├── supernova_erupt.csv
+│   ├── satellite.txt
+│   └── user-added_scatter_light.fits / .npy
+├── reference_data/
+│   ├── star_catalog.fits
+│   ├── galaxy_catalog.csv
+│   └── filter_transmission.csv
+└── out/
+```
 
-- **config.json**: Defines simulator parameters for different classes (see Appendix Table in paper for full parameter list and descriptions)
+The main execution logic is implemented in `simulator.py`, which comprises several cooperating classes, while `local_catalog_screening.py` handles local catalog filtering for specific FOVs in different observation tasks and is called by `simulator.py` during execution.
 
+AstroSkyFlow requires users to supply reference photometric data specifying the observational system: a stellar catalog, a galaxy catalog, and filter transmission curves. These files should be placed in the `reference_data` directory.
 
-### Events Directory
+## 2. Consistent internal directory organization
 
-- **schedule.csv**: Observation schedule containing:
-  - Observation order
-  - Target name
-  - Celestial coordinates 
-  - Number of frames
-  - Exposure time
-  - Delay between frame
-  - Start and end times
-  - flat level in photon (if simulate flat image)
-  
-- **Variable source files**: Define parameters for different types of variable phenomena (see Table in paper of target parameters):
-  - Transit events
-  - Binary star systems
-  - Stellar flares
-  - Occultation events
-  - Supernova eruptions
-  
-- **satellite.txt**: Satellite Two-Line Element (TLE) data downloaded from [CelesTrak](https://celestrak.org/).
+All runnable folders in this repository follow the same internal organization as `modular_core/`, including:
 
-- **Artificially defined stray light field**: The file format is either FITS or NPy.
+- `config.json`
+- `schedule.csv`
+- `sim_events/`
+- `reference_data/`
+- output directory structure
 
+This consistent layout is used to simplify software testing, manuscript reproducibility, and user customization.
 
-### Reference Data
+## 3. Minimal public tests: `tests/`
 
-Stores photometric reference data including:
-- Stellar catalog
-- Galaxy catalog
-- Filter transmission curve for different observation systems
+The `tests/` directory contains the **minimal executable files** used for lightweight software validation.
 
-**warn**: If stellar catalog is not provided, we can set it as "online" in the configuration file. And then simulator defaults to Gaia DR3 catalog and associated photometry.
+All files in this directory are intentionally reduced to the minimum needed to confirm that the code can run successfully. In particular, the `star_catalog` and `galaxy_catalog` included in `tests/` contain only the objects located in the sky region covered by the corresponding `schedule.csv`. These reduced catalogs are provided only to demonstrate code execution and basic workflow validation. They are **not** intended to be used as general-purpose reference catalogs for other simulations.
 
+Thus, the role of `tests/` is to provide minimal runnable examples for software testing, rather than scientific validation or large-scale simulation.
 
-### Output Directory
+## 4. Manuscript reproducibility: `reproduce_paper/`
 
-Each scheduled target creates a dedicated subdirectory containing:
-- Simulated FITS images
-- Corresponding input variable files with injected source information for validation
+The `reproduce_paper/` directory contains the materials needed to reproduce the validation workflows and example results described in the paper.
 
+This directory has already been configured according to the manuscript settings for the **Muguang-transit case** and the **Xinglong-binary case**. The generated images can be used to reproduce the corresponding results presented in the paper.
 
-## Quick Start Guide
+Some paper-reproduction examples require large reference catalogs that are distributed separately through Zenodo rather than duplicated in the GitHub repository.
 
-### 1. Prepare Reference Data
+- For the **transit** reproduction workflow, the required `star_catalog` and `galaxy_catalog` in `reference_data/` should be downloaded from the Zenodo dataset.
+- For the **binary** reproduction workflow, the required `galaxy_catalog` in `reference_data/` should also be downloaded from the Zenodo dataset.
 
-Provide the following photometric reference data for your observational system:
-- Stellar catalog
-- Galaxy catalog
-- Filter transmission curve
+After downloading, please place these files in the corresponding `reference_data/` directory before running the reproduction workflows.
 
-**warn**: Tianyu stellar catalog and gaia galaxy catalog are avilable on [Zenodo](https://zenodo.org/records/18830766). Tianyu filter transmission curve is located in the `reference_data/` directory of this repository.  
+### Zenodo reference dataset
 
-### 2. Configure Observation Schedule
+The reference catalog dataset is archived separately on Zenodo because of file size. It contains the large star and galaxy catalogs used by AstroSkyFlow.
 
-Edit `events/schedule.csv` directory of this repository to define your observation sequence:
-- Targets must be arranged in **strict chronological order**
-- Include target coordinates, exposure times, and observation windows
+Zenodo dataset DOI: `10.5281/zenodo.18830766`
 
-**warn**: You can directly download the `events/schedule.csv` file from this repository and edit it as needed.
+Users should download the required files from the Zenodo record and place them into the appropriate `reference_data/` folder of the corresponding working directory.
 
-### 3. Configure Variable Sources (Optional)
+## 5. Quick start
 
-Edit `events/[specific_variable].csv` directory of this repository to inject specific variable sources:
-- Modify parameters in the corresponding variable files (`transit.csv`, `binary.csv`, etc.)
-- **Important**: The variable star must exist in your stellar catalog
-- **Workaround**: To inject synthetic variables not in the catalog, assign the desired properties to any existing star by using its Gaia DR3 ID in the variable file
+AstroSkyFlow is organized into a modular directory structure to separate input configurations, reference data, and simulation outputs. The main components are the core scripts, configuration files, events directory, reference photometric data directory, and output directory.
 
-**warn**: You can directly download the `events/` files from this repository and edit them as needed.
+The main execution logic is implemented in `simulator.py`, which comprises several cooperating classes. `local_catalog_screening.py` handles local catalog filtering for specific FOVs in different observation tasks and is called by `simulator.py` during execution. The simulator parameters of different classes are specified in `config.json`.
 
-### 4. Adjust Simulator Parameters
+### Step 1. Prepare reference photometric data
 
-Edit `config.json`:
-- Modify only the key parameters required for your use case
-- All other parameters can remain at their validated default values
-- See Appendix Table for detailed parameter descriptions
+AstroSkyFlow requires users to supply reference photometric data specifying the observational system: a stellar catalog, a galaxy catalog, and filter transmission curves. These files should be placed in the `reference_data/` directory.
 
-**warn**: You can directly download the `config.json` file from this repository and edit it as needed.
+If the simulated observation system lacks a proprietary stellar catalog, users can set the corresponding parameter `star_catalog` in `config.json` to `"online"`. AstroSkyFlow will then query the Gaia archive over the network and use the Gaia DR3 catalog and its photometry as the reference stellar catalog. Note that this mode requires an internet connection and may be subject to archive-query limits and latency.
 
-### 5. Run the Simulator
+### Step 2. Prepare the observation schedule
+
+Modify `schedule.csv` to define the observing sequence. The file includes the observation order, target names, celestial coordinates, number of frames, exposure time, and start and end times. Individual observations must be arranged in strict chronological order.
+
+### Step 3. Prepare event files
+
+The `sim_events/` directory contains the schedule file and other variable-input files. These include `transit`, `binary`, `flare`, `occultation`, `supernova_erupt`, and `satellite` files. Users can also provide a user-defined scatter-light file.
+
+If users need to inject specific variable sources, they can modify the parameters in the corresponding event files. To successfully inject and simulate a variable source, it is essential that this variable exists within the stellar catalog used for the current observation. If users do not require the source to be truly present, they may assign the desired optical variability properties to any star in the fixed stellar catalog by entering the Gaia DR3 ID of that fixed star into the corresponding column of the event files.
+
+### Step 4. Edit configuration
+
+Final setup is completed by adjusting parameters in `config.json`. Users may modify only the key parameters and remove the others; the code will automatically apply default values for unspecified entries.
+
+Two essential operational constraints must be satisfied:
+
+1. the initial simulator time set in `config.json` must be earlier than the start time of the first scheduled observation;  
+2. all scheduled targets must be at an altitude greater than 25 degrees at their respective observation times.
+
+This constraint mirrors real-world telescope safety protocols, and AstroSkyFlow will generate a warning if it is violated.
+
+### Step 5. Run AstroSkyFlow
+
+Run the simulator from the corresponding working directory:
 
 ```bash
 python simulator.py
 ```
 
-## Important Constraints
+### Step 6. Output products
 
-⚠️ **Operational Requirements**:
-
-1. **Reference Time**: The simulation reference time (`T_0`) in `config.json` must be **earlier than** the start time of the first scheduled observation
-
-2. **Altitude Constraint**: All scheduled targets must be at an altitude **greater than 25 degrees** at their respective observation times
-   - This mirrors real-world telescope safety protocols
-   - The simulator will generate a warning if this constraint is violated
-
-## Output
-
-For each target in the schedule, the simulator generates:
-- **FITS images**: Synthetic observations with realistic noise and effects
-- **Injection logs**: CSV files documenting injected variable sources for validation and comparison
-
-## Documentation
-
-- **Full Parameter List**: See Appendix Table (referenced in config.json)
-- **Variable Source Parameters**: See Table of target parameters (referenced in events directory)
-- **Directory Structure**: See Figure (folder organization diagram)
-
-## Support
-
-For issues, questions, or contributions, please open an issue on the GitHub repository.
-
----
-
-**Note**: Ensure all schedule times are properly ordered and altitude constraints are satisfied before running the simulation to avoid warnings and ensure physically realistic outputs.
+In the output directory, each scheduled target has a dedicated subdirectory that contains the simulated FITS images and corresponding injected-variable files for subsequent comparison and validation.

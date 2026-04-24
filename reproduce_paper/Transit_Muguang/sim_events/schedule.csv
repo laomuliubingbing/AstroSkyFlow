@@ -1,0 +1,4 @@
+observation_order,target_name,ra,dec,azi,alt,flat_level,exposure_s,delay_between_frame_s,n_max_frames,jd_utc_begin,jd_utc_end,obs_process_id,astrometry_solve,use_subpixel,last_of_this_obs
+1,bias_test,47.36893066,30.67357305,,,,0,0,5,2460320.9070000000 ,2460320.9300000000 ,,,,
+2,flat_test,47.36893066,30.67357305,,,10000,180,0,5,2460320.9500000000 ,2460320.9700000000 ,,,,
+3,WASP-11_test,47.3689307,30.6735731,,,,180,0,75,2460320.9765000000 ,2460321.6900000000 ,,,,
