@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the archived Zenodo release."
+title: "AstroSkyFlow: an astronomical sky image flow simulator for time domain survey validation and machine learning"
+version: "1.0.0"
+authors:
+  - family-names: Li
+    given-names: Kexin
+    orcid: "https://orcid.org/0009-0003-9882-8542"
+date-released: 2026-04-24
+license: MIT
+repository-code: "https://github.com/laomuliubingbing/AstroSkyFlow"

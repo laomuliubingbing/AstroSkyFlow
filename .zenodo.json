@@ -1,0 +1,26 @@
+{
+  "title": "AstroSkyFlow: an astronomical sky image flow simulator for time domain survey validation and machine learning",
+  "upload_type": "software",
+  "description": "Frozen release of the AstroSkyFlow software associated with the AAS journal manuscript.",
+  "creators": [
+    {
+      "name": "Li, Kexin",
+      "orcid": "0009-0003-9882-8542",
+      "affiliation": "State Key Laboratory of Dark Matter Physics, Tsung-Dao Lee Institute & School of Physics and Astronomy, Shanghai Jiao Tong University, Shanghai 201210, China"
+    }
+  ],
+  "license": "mit",
+  "access_right": "open",
+  "keywords": [
+    "astronomy",
+    "simulation",
+    "transient events",
+    "observational planning",
+    "software"
+  ],
+  "communities": [
+    {
+      "identifier": "aas"
+    }
+  ]
+}
